@@ -1,1 +1,84 @@
-Placeholder
+Mail2Web
+========
+eMail Web Interface
+
+
+Overview
+********
+
+There are some countries (like for example Japan) where you can get very cheap
+mobile E-Mail flatrates, but no direct internet access.
+To have access to some basic sites you can install this
+python script on your mail server, which will translate simple
+e-Mail commands into web page fetches.
+
+Authorised users are identified by their from address and a password
+in the subject line.
+
+
+Installation
+************
+
+You just need to call the program from the ~/.forward file
+for the respective user which should deal with your mail requests.
+
+Content of ~/.forward file:
+ |"cd /home/username/mail2web; FAKECHROOT_EXCLUDE_PATH=/usr/lib/python2.5 fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
+
+Please update to your settings.
+If you don't like the fakechroot'ing you can comment off the block
+"Go into CHROOT" in mail2web.py
+
+The script watcher_report_output.sh checks the execution of
+mail2web and generate an error mail in case of encountered errors.
+In this case further execution of the program is prevented.
+When you don't want to use this script then just remove it from the call.
+
+To have some simple logfile rotation for watcher_report_output.sh
+use the following crontab entry for the user (again adapt settings).
+# Crontab-Entry for simple log archiving
+# mail2web: Simple Logfile cleaner: Every 2 weeks make one backup
+24           2       11,21    *     *      cd $HOME/mail2web; nice bzip2 -c watcher_report_output.log > watcher_report_output.log.bak.bz2 ; rm watcher_report_output.log
+
+
+
+Configuration and Extension
+***************************
+You need to add the authorised users into the file mail2webuser.py .
+the format should be self-explanatory.
+
+Update some program settings like SMTP server or data limit in the
+Opts dictionary inside mail2web.py .
+
+For adding new web fetching methods just have a look at the implementations
+below the section "Command execution objects" in mail2web.py .
+Take the one which suits you best as base and then implement it.
+The new worker you then need to add to the dictionary WorkerClasses.
+
+
+Usage
+*****
+See Homepage mentioned below at "Web Links"
+
+
+
+License & Author
+****************
+GNU General Public License, version 2
+Copyright (C) 2010  Robert Lange <robert.lange@s1999.tu-chemnitz.de>
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+version 2 as published by the Free Software Foundation.
+
+http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+
+
+Web Links
+*********
+Homepage
+	http://sethdepot.org/site/SethdepotServices#Mail2Web_Gateway
+
+Repository
+	https://github.com/sd2k9/mail2web
