@@ -47,8 +47,13 @@ Configuration and Extension
 You need to add the authorised users into the file mail2webuser.py .
 the format should be self-explanatory.
 
-Update some program settings like SMTP server or data limit in the
+Update some program settings like sender, SMTP server or data limit in the
 Opts dictionary inside mail2web.py .
+You should also change the disclaimer msg_explanation inside the code, which
+is send with every message.
+
+Update some program settings like mail recipient below "*** Settings"
+inside watcher_report_output.sh .
 
 For adding new web fetching methods just have a look at the implementations
 below the section "Command execution objects" in mail2web.py .
@@ -65,7 +70,7 @@ See Homepage mentioned below at "Web Links"
 License & Author
 ****************
 GNU General Public License, version 2
-Copyright (C) 2010  Robert Lange <robert.lange@s1999.tu-chemnitz.de>
+Copyright (C) 2010 Robert Lange <robert.lange@s1999.tu-chemnitz.de>
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
