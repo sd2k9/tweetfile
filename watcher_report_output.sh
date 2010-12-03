@@ -7,8 +7,9 @@
 # Licensed under the GNU General Public License, version 2
 # http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 #
+# CURRENTLY FLAGGING IS DISABLED! JUST MAILING
 #
-# Crontab-Entry for simple log archiving
+# Crontab Entry for simple backup:
 # # mail2web: Simple Logfile cleaner: Every 2 weeks make one backup
 #   24           2       11,21    *     *      cd $HOME/mail2web; bzip2 -c watcher_report_output.log > watcher_report_output.log.bak.bz2 ; rm watcher_report_output.log
 #

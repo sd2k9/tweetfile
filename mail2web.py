@@ -199,13 +199,13 @@ class WorkerWadoku(WorkerBase):
     def quote(self, args):
         """Quote the URL data and restore the Umlauts as required by Wadoku"""
         data = urllib.quote_plus(args)
-        data = data.replace("Ae","Ä")
-        data = data.replace("Oe","Ö")
-        data = data.replace("Ue","Ü")
-        data = data.replace("ae","ä")
-        data = data.replace("oe","ö")
-        data = data.replace("ue","ü")
-        data = data.replace("sz","ß")
+        data = data.replace("Ae","%C3%84")
+        data = data.replace("Oe","%C3%96")
+        data = data.replace("Ue","%C3%9C")
+        data = data.replace("ae","%C3%A4")
+        data = data.replace("oe","%C3%B6")
+        data = data.replace("ue","%C3%BC")
+        data = data.replace("sz","%C3%9F")
         return data
 
 
@@ -487,15 +487,16 @@ def send_mail(command_id, command_raw, payload, rec):
     msg['From'] =  Opts['sender']
     msg['To'] = rec
     # Plain text as explanation
-    msg_explanation = MIMEText( "This is the demon slave\n" + \
+    explanation = "This is the demon slave\n" + \
                    "I executed for you:\n" + command_raw + \
                    "\n\nHave fun!\n" + \
                    "To reach some admin, please mailto: admin@thishost\n" + \
                    "This mail address only takes commands for fetching web sites\n" +\
                    "\nPlease be also remindad that this is an beta service. " +\
                    "This means particularly that I am currently logging and " +\
-                   "inspecting all accesses.",
-                    "text", "utf-8" ) # And the explanation as text
+                   "inspecting all accesses."
+    # This is they way also Softbank Phones understand it
+    msg_explanation = MIMEText(explanation, "plain", "utf-8" ) # And the explanation as text
     msg_explanation.add_header('Content-Disposition', 'inline')  # Show message inline
     msg.attach(msg_explanation)
     # And our HTML we want to send, and it's an attachment

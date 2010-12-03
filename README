@@ -49,7 +49,7 @@ the format should be self-explanatory.
 
 Update some program settings like sender, SMTP server or data limit in the
 Opts dictionary inside mail2web.py .
-You should also change the disclaimer msg_explanation inside the code, which
+You should also change the disclaimer variable "explanation" inside the code, which
 is send with every message.
 
 Update some program settings like mail recipient below "*** Settings"
