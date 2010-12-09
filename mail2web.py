@@ -8,8 +8,7 @@
 # Content of ~/.forward:
 # |"cd /home/demonslave/mail2web; FAKECHROOT_EXCLUDE_PATH=/usr/lib/python2.5 fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
 #      created: 2010-10-04
-#  last change: $Date$
-#      Version: $Name:  $
+#  last change: $LastChangedRevision$
 #
 # Copyright (C) 2010 Robert Lange (robert.lange@s1999.tu-chemnitz.de)
 # Licensed under the GNU General Public License, version 2
@@ -623,6 +622,6 @@ def main():
 
 
 # *** Call Main program
-__version__ = filter(str.isdigit, "$LastChangedRevision: 000$")
+__version__ = filter(str.isdigit, "$LastChangedRevision$")
 if __name__ == "__main__":
     main()

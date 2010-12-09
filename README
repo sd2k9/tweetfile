@@ -65,6 +65,9 @@ Usage
 *****
 See Homepage mentioned below at "Web Links"
 
+When you want to have a kind of revision count embedded for your local use, run
+the script do_keyword_expansion.sh
+Do not commit files after keyword expansion is done.
 
 
 License & Author
