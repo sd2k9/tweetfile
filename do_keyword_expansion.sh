@@ -15,7 +15,7 @@
 
 # *** Settings
 # Files to change
-FILES="mail2web.py mail2webuser.py"
+FILES="tweetfile.py tweetfileaccess.py"
 
 # Get commit count for the directory
 REVCOUNT=$(git log --pretty=oneline |wc -l)
