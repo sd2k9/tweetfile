@@ -10,8 +10,8 @@
 # CURRENTLY FLAGGING IS DISABLED! JUST MAILING
 #
 # Crontab Entry for simple backup:
-# # mail2web: Simple Logfile cleaner: Every 2 weeks make one backup
-#   24           2       11,21    *     *      cd $HOME/mail2web; bzip2 -c watcher_report_output.log > watcher_report_output.log.bak.bz2 ; rm watcher_report_output.log
+# # tweetfile: Simple Logfile cleaner: Every 2 weeks make one backup
+#   24           2       11,21    *     *      cd $HOME/tweetfile; bzip2 -c watcher_report_output.log > watcher_report_output.log.bak.bz2 ; rm watcher_report_output.log
 #
 #
 # The output is mailed to some location.
@@ -20,8 +20,8 @@
 #
 
 # *** Settings
-PROG_CMD="./mail2web.py"
-LOG_FILE="./weather_info_fetch.suspend"
+PROG_CMD="./tweetfile.py"
+LOG_FILE="./tweetfile.suspend"
 MAIL_CMD="mail"
 MAIL_TO_ME="MYMAILADDRESS"
 # Send a mail to a tweetbymail-account - currently disabled
@@ -52,9 +52,9 @@ if [ -s "$LOG_FILE" ]; then
   cat $LOG_FILE
 
   # TODO: Mail the message me
-  $MAIL_CMD -s "$HOSTNAME: mail2web report" $MAIL_TO_ME < $LOG_FILE
+  $MAIL_CMD -s "$HOSTNAME: tweetfile report" $MAIL_TO_ME < $LOG_FILE
   # Twitter failure - will not work yet
-  #  $MAIL_CMD -s "EARTHQUAKE Failing" $MAIL_TO_TWITTER
+  #  $MAIL_CMD -s "TWEETFILE Failing" $MAIL_TO_TWITTER
 
   # TEMPORARY CLEAR LOGFILE AGAIN, DON'T WANNA FAIL
   rm $LOG_FILE

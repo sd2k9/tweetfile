@@ -1,2 +1,6 @@
 # Ignore backup files
 *~
+# Ignore the real access file, because it will contain private data
+# Checkin the template file instead
+tweetfileaccess.py
+tweetfileaccess.pyc

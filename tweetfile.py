@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# file name: ''mail2web.py''
-#  project: eMail Web Interface
-# function: Fetches web pages by a simple eMail interface
+# file name: ''tweetfile.py''
+#   project: Tweet a File
+#  function: Receives a file via eMail, puts it into
+#            the file system and twitter the shortended URL
 #           - Runs over the .forward file in the linux home directory
 #
 # Content of ~/.forward:
-# |"cd /home/demonslave/mail2web; FAKECHROOT_EXCLUDE_PATH=/usr/lib/python2.5 fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
-#      created: 2010-10-04
+# |"cd /home/username/tweetfile; FAKECHROOT_EXCLUDE_PATH=/usr/lib/python2.5 fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
+# Run with local python lib for oauth2 and twitter:
+#  PYTHONPATH=$PWD/pylib/lib/python2.6/site-packages ./tweetfile.py
+#      created: 2011-03-16
 #  last change: $LastChangedRevision$
 #
 # Copyright (C) 2010 Robert Lange (robert.lange@s1999.tu-chemnitz.de)
@@ -25,36 +28,31 @@ import logging
 import optparse
 # Read from stdin, Program path
 import sys
-# Prepare a Message as E-Mail
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-# from email.encoders import encode_quopri
-from email import Charset
-# Send mail by SMTP
-import smtplib
+# Parse E-Mail Message
+import email
 # To be able to catch also socket errors by their name
 import socket
-# URL Fetcher
-import urllib
-# Current date for Train fetcher
-import datetime
-# Chroot ability
+# Chroot ability, Path+Dir Manipulations
 import os
+# Regular Expressions
+import re
+# Temporary file name - abuse for random file name creation
+import tempfile
+# Error numbers
+import errno
+# Spawn sub-process
+import subprocess
+# Twitter interface
+import twitter
+# Required modules for bitly URL shortener
+import urllib2
+import urllib
+import simplejson
+
 
 # Get the list of allowed users accessing this service
-from mail2webuser import UserList
-
-
-# *** Global settings as dictionary
-Opts = {
-    # Sender of the messages
-    'sender': 'mail2web@localhost',
-    # SMTP Server, Host
-    'smtp_server_host': '127.0.0.1',
-    'smtp_server_port': '25',         # For Direct Sending
-    # Limit of data to fetch: 100k
-    'data_limit': 100*1024
-    }
+# and global settings
+from tweetfileaccess import UserList, Opts
 
 
 # Provide logging shortcuts
@@ -65,8 +63,11 @@ perror = logging.error
 
 # ********************************************************************************
 # *** Go into CHROOT - see help text in except block
-chroot_dir = sys.path[0] + "/empty_chroot"
+chroot_dir = sys.path[0] + "/tweetfile_data"
 try:
+    # Some functions like tempfile don't care about chroot inside fakechroot
+    # Therefore also change the OS directory before chroot'ing
+    os.chdir(chroot_dir)
     os.chroot(chroot_dir)
     pass
 except OSError:
@@ -83,297 +84,108 @@ except OSError:
 
 
 
+# ******************************************************************************
+# *** Objects
+
+class ExtractMailError(BaseException):
+   """Exception Class for function extract_mail_content
+
+   These raised errors are not critical, they signal that the processing
+   should be aborted here.
+   """
+   pass
+
+class StoreFileError(BaseException):
+   """Exception Class for function store_file
+
+   These raised errors are not critical, they signal that the processing
+   should be aborted here.
+   """
+   pass
+
+class TwitterMsgError(BaseException):
+   """Exception Class for class twittermsg
+
+   These raised errors are not critical, they signal that the processing
+   should be aborted here.
+   """
+   pass
+
+class BitlyMsgError(BaseException):
+   """Exception Class for Bit.Ly errors
+
+   These raised errors are not critical, they signal that the processing
+   should be aborted here.
+   """
+   pass
+
 # ********************************************************************************
-# *** Command execution objects
+# *** Twitter object
+class twittermsg:
+    """ Twitter the given string"""
 
-class WorkerBase:
-    """Base class for command execution classes."""
-    def execute(self,args):
-       """Perform the command with the supplied arguments.
+    # Variables
+    _api = ""
 
-       Parameter args: The argument string for the respective command
+    def __init__(self, tcreds):     # C'tor
+        """Constructor with twitter credentials
 
-       Return: Webpage to attach to the mail to send as result (as string)
-               None when no Mail should be send
+           The required credentials are stored as dict in tcred with the content
+           consumer_key
+           consumer_secret
+           access_token_key
+           access_token_secret
+        """
+        # Changes: Username/password: Consumer Data, not account
+        # access_*: Fetch from tool python-twitter/get_access_token.py
+        self._api = twitter.Api(consumer_key=tcreds['consumer_key'],
+                               consumer_secret=tcreds['consumer_secret'],
+                               access_token_key=tcreds['access_token_key'],
+                               access_token_secret=tcreds['access_token_secret']
+                                )
+        # print self._api.VerifyCredentials()
 
-       """
-       # Don't call the base class by itself
-       NotImplementedError("Abstract base class must not be called!")
+    def _urlshorten(self, link):
+        """Shortens the provided link"""
+        bitly_api_user = Opts['bitly_api_user']
+        bitly_api_key = Opts['bitly_api_key']
+        if bitly_api_user is None or bitly_api_key is None :
+            # If no bitly API key defined, do nothing
+            return link
+
+        try:
+           return bitly_shorten(bitly_api_user, bitly_api_key, link)
+        except BitlyMsgError as detail:  # we failed
+            raise TwitterMsgError("URL shortening failed with failure " + str(detail))
+        except:
+            raise # Other errors are forwarded
 
 
-class WorkerTest(WorkerBase):
-    """Just returns a Hello World message."""
-    def execute(self,args):
-        pinfo("Test: Returning Hello World Document")
-        return "<html>Hello World</html>"
+    def doit(self, msg, flink):
+        """Twitter the message with file link.
 
-class WorkerWebFetch(WorkerBase):
-    """Fetches the given address and returns it."""
-    def execute(self,args):
-        # When no URL scheme specified, just expect "http://"
-        if args.find("://") is -1 :
-            url = "http://" + args
+        The file link will be URL-shortened
+
+        msg: The message
+        flink: File link
+        """
+
+        # Shorten URL, when existing
+        if flink is None:
+            postfix = ""   # Nothing to attach
         else:
-            url = args
-        pinfo("   Web: Fetching " + url + " (Limit: " + str(Opts['data_limit']) + ")" )
-        try:
-            url = urllib.urlopen(url)
-            data = url.read(Opts['data_limit'])
-        # urllib2: except  (urllib.URLError, ValueError) as detail:
-        except  (IOError, ValueError),  detail:
-            # Showing error message as return
-            return "<html>Error fetching data from " + args + ":</br>" + \
-                 str(detail) +  "</html>"
-        else:   # No error, return the data fetched
-            return data;
+            postfix = " " + self._urlshorten(flink)
 
+        pinfo("Tweet: " + msg +  postfix)
 
-class MozillaUrlOpener(urllib.FancyURLopener):
-    """For getting access to google, we need to change the user agent
+        # Debug: Disabled
+        # self._api.PostUpdate(msg + postfix)
 
-    That is working the following way: http://wolfprojects.altervista.org/changeua.php
-    """
-    version = 'Mozilla/5.0 (Windows; U; Windows NT 5.1; it; rv:1.8.1.11) Gecko/20071127 Firefox/2.0.0.11'
+    def finish(self):
+        """Cleanup and clear credentials"""
+        self._api.ClearCredentials()
 
-
-class WorkerGoogle(WorkerBase):
-    """Queries Google with the supplied search term."""
-    def execute(self,args):
-        urlarg = urllib.quote_plus(args)   # Encode the data
-        pinfo("   Google: Fetching Data " + urlarg + " (Limit: " + str(Opts['data_limit']) + ")" )
-        # Template: http://www.google.co.jp/search?q=hallo&safe=off
-        urldata = "http://www.google.com/search?q=%s&safe=off" % (urlarg)
-        try:
-            url = MozillaUrlOpener()
-            url_open = url.open(urldata)
-            data = url_open.read(Opts['data_limit'])
-        # urllib2: except  (urllib.URLError, ValueError) as detail:
-        except  (IOError, ValueError), detail:
-            # Showing error message as return
-            return "<html>Error fetching data from " + args + ":</br>" + \
-                 str(detail) +  "</html>"
-        else:   # No error, return the data fetched
-            return data;
-
-class WorkerGoogleFirst(WorkerBase):
-    """Returns the first match from Google with the supplied search term.
-       <br />
-      This function is also known as "Feeling Lucky Search".
-    """
-    def execute(self,args):
-        urlarg = urllib.quote_plus(args)   # Encode the data
-        pinfo("   Google First: Fetching Data " + urlarg + " (Limit: " + str(Opts['data_limit']) + ")" )
-        # Template: http://www.google.co.jp/search?q=hallo&safe=off&btnI
-        urldata = "http://www.google.com/search?q=%s&safe=off&btnI" % (urlarg)
-        try:
-            url = MozillaUrlOpener()
-            url_open = url.open(urldata)
-            data = url_open.read(Opts['data_limit'])
-        # urllib2: except  (urllib.URLError, ValueError) as detail:
-        except  (IOError, ValueError), detail:
-            # Showing error message as return
-            return "<html>Error fetching data from " + args + ":</br>" + \
-                 str(detail) +  "</html>"
-        else:   # No error, return the data fetched
-            return data;
-
-
-class WorkerWadoku(WorkerBase):
-    """Queries Wadoku German-Japanese dictionary."""
-    def execute(self,args):
-        urlarg = self.quote(args)   # Encode the data and Umlauts
-        pinfo("   Wadoku: Asking for " + urlarg + " (Limit: " + str(Opts['data_limit']) + ")" )
-        # Template: http://www.wadoku.de/wadoku/search/hallo
-        urldata = "http://www.wadoku.de/wadoku/search/%s" % (urlarg)
-        try:
-            url = urllib.urlopen(urldata)
-            data = url.read(Opts['data_limit'])
-        # urllib2: except  (urllib.URLError, ValueError) as detail:
-        except  (IOError, ValueError), detail:
-            # Showing error message as return
-            return "<html>Error fetching data from " + args + ":</br>" + \
-                 str(detail) +  "</html>"
-        else:   # No error, return the data fetched
-            return data;
-    def quote(self, args):
-        """Quote the URL data and restore the Umlauts as required by Wadoku"""
-        data = urllib.quote_plus(args)
-        data = data.replace("Ae","%C3%84")
-        data = data.replace("Oe","%C3%96")
-        data = data.replace("Ue","%C3%9C")
-        data = data.replace("ae","%C3%A4")
-        data = data.replace("oe","%C3%B6")
-        data = data.replace("ue","%C3%BC")
-        data = data.replace("sz","%C3%9F")
-        return data
-
-
-# Fahrplan-Abfrage mit http://world.jorudan.co.jp/norikae/cgi-bin/engkeyin.cgi
-class WorkerNorikae(WorkerBase):
-    """Queries Norikae train time table. <br />
-
-    We expect the format [TO.]FROM.TO[.HH.MM[.DD[.Month[.YYYY]]]]] <br />
-    Everything missing will be taken as now. <br />
-    String literal "TO." at beginning will select arrival-time instead of departure time.
-    <br />
-    Examples:<br />
-    DO train TO.Tokyo.Miyaji - Timetable now from Tokyo to Miyaji<br />
-    DO train TO.Tokyo.Miyaji.17.45.20.11 - Timetable from Tokyo to  Miyaji on 5.45pm 20.Nov
-    <br />
-    Attention: When you misspell the stations you will get an meaningless error message!
-    """
-    def execute(self,args):
-        url = "http://world.jorudan.co.jp/norikae/cgi-bin/engkeyin.cgi"
-        raw_data = self.parse_args(args)   # parse arguments
-        data = urllib.urlencode(raw_data)  # Encode for POST
-        if data is None:
-            pinfo("   Norikae: Failing to parse argument string " + args)
-            # Showing error message as return
-            return "<html>Train: Failing to parse argument string " + args + \
-                    "</html>"
-        # print url # Debug
-        # print data # Debug
-        pinfo("   Norikae: Asking for " + data + " (Limit: " + str(Opts['data_limit']) + ")" )
-        # import sys # Debug
-        # sys.exit(1) # Debug
-
-        try:
-            url = urllib.urlopen(url, data)  # Do a post request
-            data = url.read(Opts['data_limit'])
-        # urllib2: except  (urllib.URLError, ValueError) as detail:
-        except  (IOError, ValueError), detail:
-            # Showing error message as return
-            return "<html>Error fetching data from " + args + ":</br>" + \
-                 str(detail) +  "</html>"
-        else:   # No error, return the data fetched
-            return data;
-
-    def parse_args(self, args_in):
-       """Parse the arguments into dict usable with Norikae POST
-
-       Returns None for Fail
-       """
-
-
-       # First we parse the arguments into abstract values
-       dc = self.parse_abstract_args(args_in)
-       if dc is None:
-           return None # Some failure occured
-
-       # Process to actual field names
-       # from_in: text
-       # to_in: text
-       # Dyyyymm - YYYYMM
-       # Ddd - DD
-       # Dhh - h am/pm
-       # Dmn - m
-       # Sfromto - from/to
-       dcp = {}
-       dcp['from_in'] = dc['from']
-       dcp['to_in']   = dc['to']
-       dcp['Dyyyymm'] = "%04d%02d" % (int(dc['year']), int(dc['month']))
-       dcp['Ddd']     = "%02d" % (int(dc['day']))
-       dcp['Dhh']     = "%02d" % (int(dc['hour']))
-       dcp['Dmn']     = "%02d" % (int(dc['min']))
-       dcp['Sfromto'] = dc['fromto']
-       # Preset values from my side
-       dcp['Sseat'] = "1"     # Unreserved
-       # dcp['Bchange']     = ""  # Button not clicked
-       dcp['Bsearch']     = " Search "        # Search button clicked
-       # Other hidden values
-       dcp["Knorikae"]    =  "Knorikae"
-       dcp["proc_mode"]   =  "K"
-       dcp["proc_sw"]     =  "11"   # 2nd screen
-       dcp["proc_sw_sub"] =  "0"
-       dcp["from_nm"]     =  ""
-       dcp["to_nm"]       =  ""
-       dcp["Sfrom_sw"]    =  "1"
-       return dcp
-
-
-    def parse_abstract_args(self, args):
-       """Parse the arguments into abstract dict.
-
-       Returns None for Fail
-       """
-       # Dummy Debug function
-       # dc = {}
-       # dc['from'] = "Tatsutaguchi"
-       # dc['to'] = "Miyaji"
-       # dc['year'] = 2010
-       # dc['month'] = 11
-       # dc['day'] = 20
-       # dc['hour'] = 15
-       # dc['min'] = 40
-       # dc['fromto'] = 'from'
-
-
-       # Fill with today's defaults  - adjust to Japan Time
-       now = datetime.datetime.utcnow() + datetime.timedelta(hours=9)
-       dc = {}
-       dc['year'] = now.year
-       dc['month'] = now.month
-       dc['day'] = now.day
-       dc['hour'] = now.hour
-       dc['min'] = now.minute
-       # We expect the format [TO.]FROM.TO.[.MM[.HH[.DD[.Month[.YYYY]]]]]
-       sa = args.split(".")  # Just split on "."
-       # print sa # Debug
-       # Just parse it the way we're going
-       if not sa:
-           return None
-       data = sa.pop(0)
-       if data == "TO":
-           dc['fromto'] = 'to'  # To-Mode
-           # Fetch also real from
-           if not sa:
-               return None
-           data = sa.pop(0)
-       else:
-           dc['fromto'] = 'from'  # From-Mode
-       dc['from'] = data
-       if not sa:
-           return None
-       data = sa.pop(0)
-       dc['to'] = data
-       # Now all defaults are filled and we will exit when it's fine
-       if not sa:
-           return dc
-       data = sa.pop(0)
-       dc['hour'] = data
-       if not sa:
-           return dc
-       data = sa.pop(0)
-       dc['min'] = data
-       if not sa:
-           return dc
-       data = sa.pop(0)
-       dc['day'] = data
-       if not sa:
-           return dc
-       data = sa.pop(0)
-       dc['month'] = data
-       if not sa:
-           return dc
-       data = sa.pop(0)
-       dc['year'] = data
-       # All parsed and done
-       return dc
-
-
-
-# *** Build dict of worker classes, with the command name as key
-WorkerClasses = {'test': WorkerTest,
-                 'web': WorkerWebFetch,
-                 'google': WorkerGoogle,
-                 'gfirst': WorkerGoogleFirst,
-                 'wadoku': WorkerWadoku,
-                 'train': WorkerNorikae,
-                 }
-
-
-
-# ********************************************************************************
+# ******************************************************************************
 # *** Functions
 
 def extract_mail_content(readin):
@@ -383,148 +195,146 @@ def extract_mail_content(readin):
     Also character encoding for command is transformed when required
 
     Argument: file object to read from
-    Return: Sender E-Mail, Passcode, Command-String
+    Return: User ID
+            Tweet Text
+            Attachment as message object
+               None when no Attachment found
 
+    Raises exception ExtractMailError when an error occurs;
+    Error message to print is stored as 'args'
     """
 
-    # Read the first 16k - to avoid any buffer overflow or so
-    data = readin.read(16*1024)
+
+    # Create Mail parser object and parse the mail
+    msg = email.message_from_file(readin)
+
     # Debug
-    # print data
-
-    # Variables
-    addr = ''
-    code = ''
-    command = ''
-    charset = ''
-
-    # Extract the data
-    for it in data.split("\n"):
-        if it.startswith("From: ") and addr is '' :  # We found from, for 1st time
-            addr = it[6:]
-        if it.startswith("Subject: ") and code is '' :  # We found code, for 1st time
-            code = it[9:]
-        if it.startswith("DO ") and command is '' :  # We found cmd, for 1st time
-            command = it[3:]
-        if it.startswith("Content-Type:") and charset is '' :  # We found character encoding?
-            charsetfind = it.rfind("charset=")
-            if charsetfind is not -1:  # Yes, we have some
-                charset = it[charsetfind+8:]
+    # print "Sender " + msg['from']
+    # print "Tweet Text " + msg['subject']
+    # print "Multipart? "
+    # if msg.is_multipart():
+    #     print "True"
+    # else:
+    #     print "False"
+    # raise ExtractMailError("Debug abort")
 
 
-    # Okay, change character encoding for the command when specified
-    # But no need to recode UTF-8
-    if (charset is not '') and not (charset.lower() == "utf-8") :
-        pinfo("Recode command from charset " + charset)
-        try:
-            command_re = command.decode("ISO-2022-JP")
-            command_re = command_re.encode("utf-8")
-            command = command_re
-        except UnicodeError, details:
-            pwarning("Failed to recode command! Error is " +\
-                     str(detail) +\
-                     "\nContinuing with orginal string.")
+    # Now decide whether it is an valid request or not
+    # Decided on the base of sender and recipient
+    send = msg['from']
+    rec  = msg['to']
+    uid = None        # Set to user ID in case a match is found
+    # Security check: How to handle something like "From/To: good@org <evil@org>"?
+    if rec.count("@") != 1:
+        raise ExtractMailError("Double or None @ in recipient address found - bailing out because of confusion: " + rec)
+    if send.count("@") != 1:
+        raise ExtractMailError("Double or None @ in sender address found - bailing out because of confusion: " + send)
+    for key,it in UserList.iteritems():
+        # Go through user list and check
+        if rec.rfind(it['rcpt']) != -1:   # We have a match
+            uid = key
+            break
+    if uid is None:   # We had no match, so we're going back
+        raise ExtractMailError("No match for From/To Address, Exiting: " + send + "/" + rec)
+    # Else: Found a match which is valid
+
+    # Now get the attachment when there is one
+    attachment = None   # First there is none
+    if msg.is_multipart():
+        attachment = msg.get_payload(1)   # Get 1st Attachment when existing
 
     # Return
-    return addr, code, command
+    return uid, msg['Subject'], attachment
 
 
-def  check_user(sender, passcode):
-    """ Check for valid user and password.
+def store_file(uid, msg):
+    """Store the attachment with random name in file system
 
-    Returns 2 Parameters
-       1.P (valid): true when a valid user/password pair was found
-       2.P (receiver): Return mail address for this user
+    Argument: User ID
+              Attachment as message object
 
+    Returns the file name without path of the created file
+
+    Raises exception StoreFileError when an error occurs;
+    Error message to print is stored as 'args'
     """
 
-    # Return Vars
-    valid = False
-    rec = None
 
-    # Search for sender address
-    for it in UserList:
-        if sender.find(it['from']) is not -1:   # We have a match
-            pinfo("Matched user " + it['from'] + " in " + sender)
-            if it['code'] == passcode:   # And also the password is OK
-                pinfo("   Password matched")
-                rec = it['replyto']
-                if rec:
-                    valid = True  # Everything fine
-                else:    # There is no replyto defined?!
-                    perror("   Empty replyto fetched from user definition! You are wrong! Pleas fix")
-                break   # Out of our loop
-            else:
-                pwarn("   Password verification failed, continuing with next user")
-    else:   # Just give a status, this is an invalid mail
-        pinfo("No user matched; silenty ignoring mail")
-
-    # Just return our results
-    return valid, rec
+    # Get file suffix
+    filename = msg.get_filename()   # File name as stored in attachment
+    mo = re.search("(\.[^\.]*)$", os.path.basename(filename)) # Search for suffix
+    if mo is None:  # Guess suffix if file suffix is not existing
+        fsuff = mimetypes.guess_extension(msg.get_content_type())
+        if not fsuff:
+            fsuff = ""   # Empty suffix
+    else:   # We found a match for the suffix
+        fsuff = mo.group(1)
 
 
-def send_mail(command_id, command_raw, payload, rec):
-    """Sent the fetched information as Mail to the receiver.
+    # Check and create directory if required
+    dpath = UserList[uid]['putfileto']   # Base directory
+    try:
+        os.mkdir(dpath)
+    except OSError, e:
+        # Ignore directory exists error
+        if e.errno != errno.EEXIST:
+            raise
 
-    Parameter
-       command_id:  Name of the executed command
-       command_raw: Complete command with arguments
-       payload: The HTML page to return
-       rec: The Mail receiver
+    # Get a random file name
+    fp = tempfile.NamedTemporaryFile(suffix=fsuff, prefix ='', dir = dpath, delete=False)
+    filename = fp.name
 
-    Return: True for OK, False for Failure
-    """
-
-    # Override python's weird assumption that utf-8 text should be encoded with base64
-    Charset.add_charset('utf-8', Charset.QP, Charset.QP, 'utf-8')
-
-    # First format as a message
-    # Create the container (outer) email message.
-    msg = MIMEMultipart()
-    msg['Subject'] = 'Mail2Web Fetched: ' + command_id
-    # me == the sender's email address
-    msg['From'] =  Opts['sender']
-    msg['To'] = rec
-    # Plain text as explanation
-    explanation = "This is the demon slave\n" + \
-                   "I executed for you:\n" + command_raw + \
-                   "\n\nHave fun!\n" + \
-                   "To reach some admin, please mailto: admin@thishost\n" + \
-                   "This mail address only takes commands for fetching web sites\n" +\
-                   "\nPlease be also remindad that this is an beta service. " +\
-                   "This means particularly that I am currently logging and " +\
-                   "inspecting all accesses."
-    # This is they way also Softbank Phones understand it
-    msg_explanation = MIMEText(explanation, "plain", "utf-8" ) # And the explanation as text
-    msg_explanation.add_header('Content-Disposition', 'inline')  # Show message inline
-    msg.attach(msg_explanation)
-    # And our HTML we want to send, and it's an attachment
-    msg_payload = MIMEText(payload, "html", "utf-8")
-    msg_payload.add_header('Content-Disposition', 'attachment; filename="result.html"')
-    msg.attach(msg_payload)
-
-    # Send the email via our own SMTP server.
     # Debug
-    # print msg.as_string()
-    # return False
-    pinfo("Will send the result now to " + rec + " ...")
-    try:   # Open Connection; Catch exceptions
-        smtp = smtplib.SMTP(Opts['smtp_server_host'], Opts['smtp_server_port'])
-    except (smtplib.SMTPException, socket.error), detail:
-        perror("Establishing SMTP connection to " + \
-                   Opts['smtp_server_host'] + ":"  + Opts['smtp_server_port'] + \
-                   " failed: " + str(detail))
-        return False
-    try:   # Send data; Catch exceptions
-        smtp.sendmail(Opts['sender'], rec, msg.as_string())
-        smtp.quit()
-    except smtplib.SMTPException, detail:
-        perror("SMTP Mail sending failed: " + str(detail))
-        return False
-    pinfo("  Successfully send " + str(len(msg.as_string()))  + " bytes; Finished now\n")
+    # print "Created DIR: " + dpath
+    pinfo("Attachment saved to file (in chroot) " + filename)
+    # Now finally write the file
+    fp.write(msg.get_payload(decode=True))
+    fp.close()
 
-    # Everything fine - let's return
-    return True
+    # For JPEG image files try to trip all EXIF information from it
+    if Opts['strip_exif']:    # when enabled
+        if (re.search("jpe?g$", fsuff, re.IGNORECASE)):
+            try:
+                pinfo("Found jpeg image, strip EXIF tags with exiftool")
+            # Call the exiftool it
+                retcode = subprocess.call(["exiftool", "-all=", "-overwrite_original", filename], shell=False)
+                if retcode < 0:
+                    raise StoreFileError("Tried to remove EXIF tags from image but exiftool was terminated by signal" + str(-retcode))
+                elif retcode > 0:
+                    raise StoreFileError("Tried to remove EXIF tags from image but exiftool returned error code" + str(-retcode))
+            except OSError, e:
+                raise StoreFileError("Tried to remove EXIF tags from image but exiftool execution failed: " + str(e))
+            else:
+                pass   # Other errors are passed further
+
+    # Over and out, returning the pure file name
+    return os.path.basename(filename)
+
+
+def bitly_shorten(user, apikey, url):
+  """
+  Shorten URLs with the bit.ly service
+
+  Parameters:
+  user: bit.ly user name
+  apikey: bit.ly API key
+  url: URL to shorten
+
+  return: Shortened URL
+
+  Inspired from
+  http://segfault.in/2010/10/shorten-urls-using-python-and-bit-ly/
+  """
+
+  params = urllib.urlencode({'longUrl': url, 'login': user, 'apiKey': apikey, 'format': 'json'})
+  req = urllib2.Request("http://api.bit.ly/v3/shorten?%s" % params)
+  response = urllib2.urlopen(req)
+  j = simplejson.loads(response.read())
+  if j['status_code'] == 200:
+      return j['data']['url']
+  raise BitlyMsgError('%s'%j['status_txt'])
+
+
 
 # ********************************************************************************
 
@@ -533,7 +343,7 @@ def main():
 
     # *** Command line parsing
     cmd_usage="usage: %prog [options] args"
-    cmd_desc ="""Mail2Web - don't call yourself, add it into your .forward file"""
+    cmd_desc ="""tweetfile - Don't call yourself, add it into your .forward file"""
     cmd_version="%prog " + __version__
     cmd_parser = optparse.OptionParser(usage=cmd_usage,
                                    description=cmd_desc, version=cmd_version)
@@ -558,62 +368,52 @@ def main():
 
 
     # *** First read stdin to extract the information for parsing
-    sender, passcode, command_raw = extract_mail_content(sys.stdin)
-    # Error check: All must be filled
-    if not sender:
-        perror("Failed to identify sender name - something's wrong")
-        return 1
-    if not passcode:
-        perror("Failed to identify passcode - empty subject?")
-        return 1
-    if not command_raw:
-        perror("Failed to identify command - you forgot the command?")
-        return 1
-
-    # Break down the command string: "cmd aguments"
-    command_id, dummy, command_arg = command_raw.partition(" ")
+    try:
+        uid, text, getfile = extract_mail_content(sys.stdin)
+    except ExtractMailError, detail:
+        # Error encountered, most likely not allowed user
+        pwarn(detail)
+        return 1   # Parsing of .forward file should continue
+    except:
+        raise      # Other errors are just raised further
 
     # Debug
-    # print "from", sender
-    # print "code", passcode
-    # print "cmd", command_raw
-    # print "cmd_id", command_id
-    # print "cmd_arg", command_arg
+    pinfo("uid " + str(uid) + " --> " + UserList[uid]['rcpt'])
+    pinfo("text " + text)
+    if getfile is None:
+        pinfo("No attachment found")
+    else:
+        pinfo("Attachment found with name " +  getfile.get_filename())
 
-    # Check for User, and Password
-    valid, receiver = check_user(sender, passcode)
-    if not valid:   # Check failed, so we go out here
-        # "No valid authentication, exiting" -> Should be reported in check_user
-        return 0
-    # DBG
-    # print receiver
 
-    # Check for command existence and call it
-    if command_id in WorkerClasses:   # Found it
-        pinfo("Command: " + command_raw)
-        ret = (WorkerClasses[command_id])().execute(args=command_arg)
-    else:  # Fake an return with help message
-        ret = "<html><p>Your command " + command_id + " is not supported.</p>"
-        ret += "<p>Supported commands are:<ul>"
-        for it,obj in WorkerClasses.iteritems():
-            ret += "<li>" + it + ":<br />" +  obj.__doc__ + "</li>"
-        ret += "</ul></p></html>"
-        pinfo("Unknown command, send short help message instead")
 
-    # If it's None, then we're done here
-    if ret is None:
-        pinfo("Worker returned None; exiting w/o further actions")
-        return 0
+    # Store the attachment in file system
+    if getfile is not None:
+        try:
+            # Add the urlbase to the filename
+            file_link =  UserList[uid]['fileurlbase'] + "/" + store_file(uid, getfile)
+        except StoreFileError, detail:
+            # Error encountered, we just raise it
+            perror(detail)
+            raise
+        except:
+            raise      # Other errors are just raised further
+    else:  # We had no file link
+        file_link = None
 
-    # Something returned? Submit it
-    # Debug
-    # print ret
-    # return 0
 
-    # Send the result by email
-    if not send_mail(command_id=command_id, command_raw=command_raw,
-                     payload=ret, rec=receiver):
-        return 1    # There was some kind of error
+    # Then tweet the stuff
+    try:
+       twit = twittermsg(UserList[uid]['twitter'])       # Create new object
+       twit.doit(text, file_link)
+       pinfo("Twitter update done")
+       twit.finish()    # Cleanup
+    except TwitterMsgError, detail:
+        # Error encountered
+        perr(detail)
+        return 1   # failure
+    except: # All other errors - propagate
+       raise
 
 
     # All done, over and out
