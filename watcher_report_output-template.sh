@@ -20,11 +20,12 @@
 #
 
 # *** Settings
-PROG_CMD="./tweetfile.py"
+# PROG_CMD="./tweetfile.py"
+PROG_CMD="./tweetfile.py --quiet"
 LOG_FILE="./tweetfile.suspend"
 MAIL_CMD="mail"
 MAIL_TO_ME="MYMAILADDRESS"
-# Send a mail to a tweetbymail-account - currently disabled
+# Send a mail to a tweetbymail-account
 MAIL_TO_TWITTER="MYtweetbymailADDRESS"
 # Hostname used in the  mail subject
 HOSTNAME="MYHOSTNAME"
@@ -53,11 +54,11 @@ if [ -s "$LOG_FILE" ]; then
 
   # TODO: Mail the message me
   $MAIL_CMD -s "$HOSTNAME: tweetfile report" $MAIL_TO_ME < $LOG_FILE
-  # Twitter failure - will not work yet
-  #  $MAIL_CMD -s "TWEETFILE Failing" $MAIL_TO_TWITTER
+  # Twitter failure
+  $MAIL_CMD -s "TWEETFILE Failing" $MAIL_TO_TWITTER
 
   # TEMPORARY CLEAR LOGFILE AGAIN, DON'T WANNA FAIL
-  rm $LOG_FILE
+  # rm $LOG_FILE
 
 else
   # All OK

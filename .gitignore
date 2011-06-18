@@ -4,3 +4,6 @@
 # Checkin the template file instead
 tweetfileaccess.py
 tweetfileaccess.pyc
+# Ignore the real runner script, because it will contain private data
+# Checkin the template file instead
+watcher_report_output.sh

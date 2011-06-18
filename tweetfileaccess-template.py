@@ -12,8 +12,18 @@
 # http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 #
 
+# Read Program path for chroot base dir - disable when not needed
+import sys
+
 # *** Global settings as dictionary
 Opts = {
+    # Root directory to chroot to
+    # This directory will serve as chroot for the program; the files will be placed below
+    'chroot_dir': sys.path[0] + "/tweetfile_data",
+    # 'chroot_dir': "/srv/www/default/tweetfile",
+    # When set to another value that None this file permission is applied to all newly created files
+    # 'chmod': None,
+    'chmod': 0644,  # -rw-r--r--
     # set to true to automatically strip all EXIF information from
     # JPEG images
     # This needs a lot of additional FAKECHROOT_EXCLUDE_PATH settings;

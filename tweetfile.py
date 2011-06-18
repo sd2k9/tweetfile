@@ -7,8 +7,10 @@
 #           - Runs over the .forward file in the linux home directory
 #
 # Content of ~/.forward:
-# |"cd /home/username/tweetfile; FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python2.5 fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
+# |"cd /home/<username>/tweetfile; TMP=/home/<username>/tweetfile/tmp FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python2.6:/usr/bin:/usr/share/perl:/usr/share/perl5:/usr/lib/perl:/home/<username>/tweetfile/tmp fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
 # /dev is required for SSL authentication, otherwise urllib2 fails with obscure error
+# /usr/bin and *perl* is required for exiftool
+# /home/<username>/tweetfile/tmp is required because twitter+tempfile creates temporary directories
 # Run with local python lib for oauth2 and twitter:
 #  PYTHONPATH=$PWD/pylib/lib/python2.6/site-packages ./tweetfile.py
 #      created: 2011-03-16
@@ -27,13 +29,13 @@
 import logging
 # Argument parser
 import optparse
-# Read from stdin, Program path
+# Read from stdin
 import sys
 # Parse E-Mail Message
 import email
 # To be able to catch also socket errors by their name
 import socket
-# Chroot ability, Path+Dir Manipulations
+# Chroot ability, Path+Dir Manipulations, chmod
 import os
 # Regular Expressions
 import re
@@ -64,12 +66,11 @@ perror = logging.error
 
 # ********************************************************************************
 # *** Go into CHROOT - see help text in except block
-chroot_dir = sys.path[0] + "/tweetfile_data"
 try:
     # Some functions like tempfile don't care about chroot inside fakechroot
     # Therefore also change the OS directory before chroot'ing
-    os.chdir(chroot_dir)
-    os.chroot(chroot_dir)
+    os.chdir(Opts['chroot_dir'])
+    os.chroot(Opts['chroot_dir'])
     pass
 except OSError:
     # Something failed with CHROOTing - give help text
@@ -78,8 +79,10 @@ except OSError:
       me with fakechroot?
       To succeed the python libs must be excluded from CHROOT'ing
       with the shell variable setting
-      FAKECHROOT_EXCLUDE_PATH=/usr/lib/python<version>"""
-    print "       Chroot directory: " + chroot_dir
+      FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python2.6:/usr/bin:/usr/share/perl:/usr/share/perl5:/usr/lib/perl:/home/<username>/tweetfile/tmp
+                             (Adapt Python and Perl version numbers when required)
+      """
+    print "       Chroot directory: " + Opts['chroot_dir']
     print
     raise  # and now just propagate the error further
 
@@ -295,6 +298,7 @@ def store_file(uid, msg):
     pinfo("Attachment saved to file (in chroot) " + filename)
     # Now finally write the file
     fp.write(msg.get_payload(decode=True))
+    # Close file
     fp.close()
 
     # For JPEG image files try to trip all EXIF information from it
@@ -302,16 +306,28 @@ def store_file(uid, msg):
         if (re.search("jpe?g$", fsuff, re.IGNORECASE)):
             try:
                 pinfo("Found jpeg image, strip EXIF tags with exiftool")
-            # Call the exiftool it
-                retcode = subprocess.call(["exiftool", "-all=", "-overwrite_original", filename], shell=False)
+                # Call the exiftool it
+                phandler = subprocess.Popen(["exiftool", "-all=", "-overwrite_original", filename], \
+                                              shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                # Catch program output, only print it in case of error
+                cmd_stdout, cmd_stderr = phandler.communicate()
+                retcode = phandler.returncode
                 if retcode < 0:
-                    raise StoreFileError("Tried to remove EXIF tags from image but exiftool was terminated by signal" + str(-retcode))
+                    raise StoreFileError(cmd_stdout + cmd_stderr + "Tried to remove EXIF tags from image but exiftool was terminated by signal " + str(-retcode))
                 elif retcode > 0:
-                    raise StoreFileError("Tried to remove EXIF tags from image but exiftool returned error code" + str(-retcode))
+                    raise StoreFileError(cmd_stdout + cmd_stderr + "Tried to remove EXIF tags from image but exiftool returned error code " + str(retcode))
             except OSError, e:
-                raise StoreFileError("Tried to remove EXIF tags from image but exiftool execution failed: " + str(e))
-            else:
-                pass   # Other errors are passed further
+                raise StoreFileError(cmd_stdout + cmd_stderr + "Tried to remove EXIF tags from image but exiftool execution failed: " + str(e))
+            except:
+                perror(cmd_stdout + cmd_stderr)
+                raise   # Other errors are passed further
+            # Print program output as info message
+            pinfo(cmd_stdout)
+            pinfo(cmd_stderr)
+
+    # When enabled, change access rights
+    if Opts['chmod'] is not None:
+        os.chmod(filename, Opts['chmod'])
 
     # Over and out, returning the pure file name
     return os.path.basename(filename)
@@ -364,7 +380,7 @@ def main():
                     format="%(message)s")
 
     # Chroot logging only here, because otherwise it will confuse the logger
-    pinfo("Went into chroot with directory " + chroot_dir)
+    pinfo("Went into chroot with directory " + Opts['chroot_dir'])
 
     # Abort when different than no argument
     if len(cmd_args) != 0:
