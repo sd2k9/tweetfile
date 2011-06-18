@@ -7,7 +7,8 @@
 #           - Runs over the .forward file in the linux home directory
 #
 # Content of ~/.forward:
-# |"cd /home/username/tweetfile; FAKECHROOT_EXCLUDE_PATH=/usr/lib/python2.5 fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
+# |"cd /home/username/tweetfile; FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python2.5 fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
+# /dev is required for SSL authentication, otherwise urllib2 fails with obscure error
 # Run with local python lib for oauth2 and twitter:
 #  PYTHONPATH=$PWD/pylib/lib/python2.6/site-packages ./tweetfile.py
 #      created: 2011-03-16
@@ -178,8 +179,8 @@ class twittermsg:
 
         pinfo("Tweet: " + msg +  postfix)
 
-        # Debug: Disabled
-        # self._api.PostUpdate(msg + postfix)
+        # For Debug: Manually disable
+        self._api.PostUpdate(msg + postfix)
 
     def finish(self):
         """Cleanup and clear credentials"""
@@ -232,8 +233,13 @@ def extract_mail_content(readin):
     for key,it in UserList.iteritems():
         # Go through user list and check
         if rec.rfind(it['rcpt']) != -1:   # We have a match
-            uid = key
-            break
+            # Now check that also the sender is allowed
+            for listitem in it['allowedfrom']:
+                if send.rfind(listitem) != -1:   # We have a match
+                    uid = key
+                    break
+        if uid is not None:
+            break # loop aboarder when match was found
     if uid is None:   # We had no match, so we're going back
         raise ExtractMailError("No match for From/To Address, Exiting: " + send + "/" + rec)
     # Else: Found a match which is valid
