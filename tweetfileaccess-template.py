@@ -21,9 +21,11 @@ Opts = {
     # This directory will serve as chroot for the program; the files will be placed below
     'chroot_dir': sys.path[0] + "/tweetfile_data",
     # 'chroot_dir': "/srv/www/default/tweetfile",
+
     # When set to another value that None this file permission is applied to all newly created files
     # 'chmod': None,
     'chmod': 0644,  # -rw-r--r--
+
     # set to true to automatically strip all EXIF information from
     # JPEG images
     # This needs a lot of additional FAKECHROOT_EXCLUDE_PATH settings;
@@ -35,8 +37,13 @@ Opts = {
     # You can get it from here: https://bit.ly/a/your_api_key
    'bitly_api_user' : "username",
    'bitly_api_key'  : "apikey",
-   # 'bitly_api_user' : None,
-   # 'bitly_api_key' : None,
+    # 'bitly_api_user' : None,
+    # 'bitly_api_key' : None,
+
+    # SMTP Host and Port
+    # Required when you want to forward received mails to other users, otherwise ignored
+    'smtp_server_host': '127.0.0.1',
+    'smtp_server_port': '25',         # For Direct Sending
 }
 
 
@@ -50,6 +57,12 @@ UserList = {
       ],
      'putfileto':'directory relative to chroot without slash, put the received files here',
      'fileurlbase':'url under which the file in putfileto shows up, no trailing slash',
+     'forwardto': ['also forward to mail address 1',
+                   'also forward to mail address 2',
+                   '...',
+      ],
+      # Set to None when no forwarding is requied
+      # 'forwardto': None,
       # You need to register this application to your twitter account
       # to allow it's access
       # - Log into your account
@@ -80,6 +93,9 @@ UserList = {
       ],
      'putfileto':'greatuser',
      'fileurlbase':'http://sethdepot.org/share/tweetfile/greatuser',
+      # 'forwardto': ['backup1@gmail.org',
+      # ],
+      'forwardto': None,
       'twitter': {
                   'consumer_key': 'fdkjsfhjsdkfhkjasdkg',
                   'consumer_secret': 'jksdfhkjlsdafklsdjgskldjgklsdfjklasdjfkl',

@@ -33,6 +33,8 @@ import optparse
 import sys
 # Parse E-Mail Message
 import email
+# Send mail by SMTP
+import smtplib
 # To be able to catch also socket errors by their name
 import socket
 # Chroot ability, Path+Dir Manipulations, chmod
@@ -201,6 +203,7 @@ def extract_mail_content(readin):
     Argument: file object to read from
     Return: User ID
             Tweet Text
+            Message Object itself
             Attachment as message object
                None when no Attachment found
 
@@ -225,8 +228,8 @@ def extract_mail_content(readin):
 
     # Now decide whether it is an valid request or not
     # Decided on the base of sender and recipient
-    send = msg['from']
-    rec  = msg['to']
+    send = msg['From']
+    rec  = msg['To']
     uid = None        # Set to user ID in case a match is found
     # Security check: How to handle something like "From/To: good@org <evil@org>"?
     if rec.count("@") != 1:
@@ -253,7 +256,7 @@ def extract_mail_content(readin):
         attachment = msg.get_payload(1)   # Get 1st Attachment when existing
 
     # Return
-    return uid, msg['Subject'], attachment
+    return uid, msg['Subject'], msg, attachment
 
 
 def store_file(uid, msg):
@@ -391,7 +394,7 @@ def main():
 
     # *** First read stdin to extract the information for parsing
     try:
-        uid, text, getfile = extract_mail_content(sys.stdin)
+        uid, text, msg, getfile = extract_mail_content(sys.stdin)
     except ExtractMailError, detail:
         # Error encountered, most likely not allowed user
         pwarn(detail)
@@ -406,7 +409,6 @@ def main():
         pinfo("No attachment found")
     else:
         pinfo("Attachment found with name " +  getfile.get_filename())
-
 
 
     # Store the attachment in file system
@@ -436,6 +438,32 @@ def main():
         return 1   # failure
     except: # All other errors - propagate
        raise
+
+    # Finally forward the mail, when it is requested
+    if UserList[uid]['forwardto'] is not None:
+        msg_to_orginal = msg['To'] # Backup orginal value
+        try:   # Open SMTPConnection; Catch exceptions
+            smtp = smtplib.SMTP(Opts['smtp_server_host'], Opts['smtp_server_port'])
+        except (smtplib.SMTPException, socket.error), detail:
+            perror("Establishing SMTP connection to " + \
+                       Opts['smtp_server_host'] + ":"  + Opts['smtp_server_port'] + \
+                   " failed: " + str(detail))
+        except:
+            raise      # Rais all other errors
+        else:  # No error opening, continue
+            for rcpts in UserList[uid]['forwardto']:  # Iterate over all reciptiens
+                try:   # Send data; Catch exceptions
+                    # Update msg rcpt
+                    msg.replace_header('To', rcpts)
+                    smtp.sendmail(msg['From'], rcpts, msg.as_string())
+                except smtplib.SMTPException, detail:
+                    perror("SMTP Mail sending failed: " + str(detail))
+                    break
+                else:
+                    pinfo("  Successfully forwarded message to " + rcpts + "\n")
+        msg.replace_header('To', msg_to_orginal) # Restore orginal value
+        # Over and out
+        smtp.quit()
 
 
     # All done, over and out
