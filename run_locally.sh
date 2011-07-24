@@ -11,5 +11,13 @@ FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python2.6 PYTHONPATH=$PWD/pylib/lib/python
 
 echo
 echo
+FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python2.6 PYTHONPATH=$PWD/pylib/lib/python2.6/site-packages fakechroot ./tweetfile.py < testmail_umlaute.eml
+
+echo
+echo
+FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python2.6 PYTHONPATH=$PWD/pylib/lib/python2.6/site-packages fakechroot ./tweetfile.py < testmail_nihongo_umlaute.eml
+
+echo
+echo
 
 FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python2.6:/usr/bin:/usr/share/perl:/usr/share/perl5:/usr/lib/perl PYTHONPATH=$PWD/pylib/lib/python2.6/site-packages fakechroot ./tweetfile.py < mail_pic.eml

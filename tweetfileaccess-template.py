@@ -44,6 +44,11 @@ Opts = {
     # Required when you want to forward received mails to other users, otherwise ignored
     'smtp_server_host': '127.0.0.1',
     'smtp_server_port': '25',         # For Direct Sending
+
+     # The following settings are used internally, so
+     # you cannot change them here. They are only listed for convenience.
+     # testmode - Test Mode / Dry Run
+     # 'testmode': True,
 }
 
 

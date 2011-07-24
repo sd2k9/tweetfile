@@ -33,6 +33,8 @@ import optparse
 import sys
 # Parse E-Mail Message
 import email
+# Parse International E-Mail Headers
+import email.header
 # Send mail by SMTP
 import smtplib
 # To be able to catch also socket errors by their name
@@ -182,10 +184,14 @@ class twittermsg:
         else:
             postfix = " " + self._urlshorten(flink)
 
-        pinfo("Tweet: " + msg +  postfix)
+        pinfo('Tweet: "' + msg + '"' + postfix)
 
         # For Debug: Manually disable
-        self._api.PostUpdate(msg + postfix)
+        if Opts.has_key('testmode') and Opts['testmode']:
+            pwarn("   Tweet not posted in testmode")
+        else:
+            self._api.PostUpdate(msg + postfix)
+
 
     def finish(self):
         """Cleanup and clear credentials"""
@@ -255,8 +261,25 @@ def extract_mail_content(readin):
     if msg.is_multipart():
         attachment = msg.get_payload(1)   # Get 1st Attachment when existing
 
+    # Don't forget to decode header, otherwise you can end up with something
+    # like "Mit =?UTF-8?B?c8O2bGRlbg==?= umlauten"
+    # Help comes from: http://stackoverflow.com/questions/5343191/how-does-encoding-in-email-subjects-work-django-python
+    text_decoded = email.header.decode_header(msg['Subject'])
+    text = ""
+    for text_parts in text_decoded:
+        # When merging multiple parts, a space must be inserted
+        if text != "":
+            text = text + " "
+        if text_parts[1] is None:    # No special encoding
+            text = text + text_parts[0]
+        else:                        # Decoding necessary
+            text = text + text_parts[0].decode(text_parts[1])
+    # Last required conversion step
+    # Help from: http://www.saltycrane.com/blog/2008/11/python-unicodeencodeerror-ascii-codec-cant-encode-character/
+    text = unicode(text).encode("utf-8")
+
     # Return
-    return uid, msg['Subject'], msg, attachment
+    return uid, text, msg, attachment
 
 
 def store_file(uid, msg):
@@ -440,7 +463,9 @@ def main():
        raise
 
     # Finally forward the mail, when it is requested
-    if UserList[uid]['forwardto'] is not None:
+    if Opts.has_key('testmode') and Opts['testmode']:
+        pwarn("   No mail forwarding in testmode")
+    elif UserList[uid]['forwardto'] is not None:
         msg_to_orginal = msg['To'] # Backup orginal value
         try:   # Open SMTPConnection; Catch exceptions
             smtp = smtplib.SMTP(Opts['smtp_server_host'], Opts['smtp_server_port'])
