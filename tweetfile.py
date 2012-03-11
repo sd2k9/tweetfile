@@ -259,7 +259,7 @@ def extract_mail_content(readin):
     # Now get the attachment when there is one
     attachment = None   # First there is none
     if msg.is_multipart():
-        attachment = msg.get_payload(1)   # Get 1st Attachment when existing
+        attachment = msg.get_payload()[-1]   # Get last Attachment when existing
 
     # Don't forget to decode header, otherwise you can end up with something
     # like "Mit =?UTF-8?B?c8O2bGRlbg==?= umlauten"
