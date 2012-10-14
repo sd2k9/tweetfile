@@ -46,8 +46,31 @@ use the following crontab entry for the user (again adapt settings).
 
 
 
-Configuration and Extension
-***************************
+Configuration
+*************
+
+- Copy the file tweetfileaccess-template.py to tweetfileaccess.py
+- Adapt the settings in tweetfileaccess.py
+- Update UserList or add new user in tweetfileaccess.py
+  - Twitter Configuration
+    - Register tweetfile as a new app to your account
+      - Login to
+      	https://dev.twitter.com/apps/new
+      - Name: tweetfile-<your account name>
+      - Description: Tweet text and pictures via eMail
+      - Website: https://github.com/sd2k9/tweetfile
+      - Get Consumer key and Consumer secret from the next page
+      - Go to settings, change Access to Read and Write
+      - Create access token via button "Create my access token"
+      	(must be done after previous step)
+      	- Find them on the OAuth tool tab
+- Hide from other users with the command
+  chmod og-rw tweetfileaccess.py
+
+
+
+Configuration and Extension - OLD
+*********************************
 You need to add the authorised users into the file mail2webuser.py .
 the format should be self-explanatory.
 
