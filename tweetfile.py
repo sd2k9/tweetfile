@@ -497,6 +497,8 @@ def main():
 
 
 # *** Call Main program
-__version__ = filter(str.isdigit, "$LastChangedRevision$")
+__version__ = ''.join(filter(str.isdigit, "$LastChangedRevision$"))
+if __version__ == "":
+   __version__ = "(development version)"
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
