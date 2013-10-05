@@ -3,7 +3,7 @@
 # Shell script to call a program, and flag it's execution in case there
 # is any output from the program.
 #
-# Copyright (C) 2010 Robert Lange (robert.lange@s1999.tu-chemnitz.de)
+# Copyright (C) 2010 Robert Lange <sd2k9@sethdepot.org>
 # Licensed under the GNU General Public License, version 2
 # http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 #

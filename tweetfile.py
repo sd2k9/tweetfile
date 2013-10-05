@@ -16,7 +16,7 @@
 #      created: 2011-03-16
 #  last change: $LastChangedRevision$
 #
-#    Copyright (C) 2010 Robert Lange (robert.lange@s1999.tu-chemnitz.de)
+#    Copyright (C) 2010 Robert Lange <sd2k9@sethdepot.org>
 #
 #    This program is free software; you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
