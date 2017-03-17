@@ -16,7 +16,7 @@
 #      created: 2011-03-16
 #  last change: $LastChangedRevision$
 #
-#    Copyright (C) 2010 Robert Lange <sd2k9@sethdepot.org>
+#    Copyright (C) 2010,2017 Robert Lange <sd2k9@sethdepot.org>
 #
 #    This program is free software; you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -47,6 +47,8 @@ import sys
 import email
 # Parse International E-Mail Headers
 import email.header
+# Create E-Mail messages from scratch
+import email.mime.text
 # Send mail by SMTP
 import smtplib
 # To be able to catch also socket errors by their name
@@ -474,11 +476,18 @@ def main():
     except: # All other errors - propagate
        raise
 
+    # Create new message with the tweet content
+    mailbody = "Forwarded by tweetfile"
+    if file_link:
+        mailbody = "Link: " + file_link + "\n\n" + mailbody
+    fmsg = email.mime.text.MIMEText(mailbody, "plain", "utf-8")
+    fmsg["From"]    = msg["From"]
+    fmsg["To"]      = "placeholder@sethdepot.org"
+    fmsg["Subject"] = email.header.Header(text, "utf-8")
     # Finally forward the mail, when it is requested
     if Opts.has_key('testmode') and Opts['testmode']:
         pwarn("   No mail forwarding in testmode")
     elif UserList[uid]['forwardto'] is not None:
-        msg_to_orginal = msg['To'] # Backup orginal value
         try:   # Open SMTPConnection; Catch exceptions
             smtp = smtplib.SMTP(Opts['smtp_server_host'], Opts['smtp_server_port'])
         except (smtplib.SMTPException, socket.error), detail:
@@ -490,15 +499,14 @@ def main():
         else:  # No error opening, continue
             for rcpts in UserList[uid]['forwardto']:  # Iterate over all reciptiens
                 try:   # Send data; Catch exceptions
-                    # Update msg rcpt
-                    msg.replace_header('To', rcpts)
-                    smtp.sendmail(msg['From'], rcpts, msg.as_string())
+                    # Update fmsg rcpt
+                    fmsg.replace_header('To', rcpts)
+                    smtp.sendmail(fmsg['From'], rcpts, fmsg.as_string())
                 except smtplib.SMTPException, detail:
                     perror("SMTP Mail sending failed: " + str(detail))
                     break
                 else:
                     pinfo("  Successfully forwarded message to " + rcpts + "\n")
-        msg.replace_header('To', msg_to_orginal) # Restore orginal value
         # Over and out
         smtp.quit()
 
