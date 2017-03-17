@@ -1,23 +1,18 @@
-TODO:
-NOT UPDATED YET
-
-
 TweetFile
 =========
-eMail Web Interface
+Compose a Tweet from Mail
 
 
 Overview
 ********
+TweetFile is a pyton script for installation on your mail-enabled server.
+When it receives a eMail, then subject line is transformed into a twitter message.
+When the mail contains an attachment it is stored in the file system and a link is
+attached to the twitter message.  
+The content of the twitter message is also send per Mail to other reciptients.
 
-There are some countries (like for example Japan) where you can get very cheap
-mobile E-Mail flatrates, but no direct internet access.
-To have access to some basic sites you can install this
-python script on your mail server, which will translate simple
-e-Mail commands into web page fetches.
-
-Authorised users are identified by their from address and a password
-in the subject line.
+Authorised users are only identified by their from address. Therefore select an
+mail receiver adress which cannot be guessed.
 
 
 Installation
@@ -27,22 +22,25 @@ You just need to call the program from the ~/.forward file
 for the respective user which should deal with your mail requests.
 
 Content of ~/.forward file:
- |"cd /home/username/mail2web; FAKECHROOT_EXCLUDE_PATH=/usr/lib/python2.5 fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
+ |"cd /home/<username>/tweetfile; TMP=/home/<username>/tweetfile/tmp FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python2.6:/usr/bin:/usr/share/perl:/usr/share/perl5:/usr/lib/perl:/home/<username>/tweetfile/tmp fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
 
-Please update to your settings.
+ /dev is required for SSL authentication, otherwise urllib2 fails with obscure error  
+ /usr/bin and *perl* is required for exiftool  
+ /home/<username>/tweetfile/tmp is required because twitter+tempfile creates temporary directories
+
 If you don't like the fakechroot'ing you can comment off the block
-"Go into CHROOT" in mail2web.py
+"Go into CHROOT" in tweetfile.py
 
 The script watcher_report_output.sh checks the execution of
-mail2web and generate an error mail in case of encountered errors.
+tweetfile and generate an error mail in case of encountered errors.
 In this case further execution of the program is prevented.
 When you don't want to use this script then just remove it from the call.
 
 To have some simple logfile rotation for watcher_report_output.sh
 use the following crontab entry for the user (again adapt settings).
 # Crontab-Entry for simple log archiving
-# mail2web: Simple Logfile cleaner: Every 2 weeks make one backup
-24           2       11,21    *     *      cd $HOME/mail2web; nice bzip2 -c watcher_report_output.log > watcher_report_output.log.bak.bz2 ; rm watcher_report_output.log
+# tweetfile: Simple Logfile cleaner: Every 2 weeks make one backup
+24           2       11,21    *     *      cd $HOME/tweetfile; nice bzip2 -c watcher_report_output.log > watcher_report_output.log.bak.bz2 ; rm watcher_report_output.log
 
 
 
@@ -69,34 +67,6 @@ Configuration
 
 
 
-Configuration and Extension - OLD
-*********************************
-You need to add the authorised users into the file mail2webuser.py .
-the format should be self-explanatory.
-
-Update some program settings like sender, SMTP server or data limit in the
-Opts dictionary inside mail2web.py .
-You should also change the disclaimer variable "explanation" inside the code, which
-is send with every message.
-
-Update some program settings like mail recipient below "*** Settings"
-inside watcher_report_output.sh .
-
-For adding new web fetching methods just have a look at the implementations
-below the section "Command execution objects" in mail2web.py .
-Take the one which suits you best as base and then implement it.
-The new worker you then need to add to the dictionary WorkerClasses.
-
-
-Usage
-*****
-See Homepage mentioned below at "Web Links"
-
-When you want to have a kind of revision count embedded for your local use, run
-the script do_keyword_expansion.sh
-Do not commit files after keyword expansion is done.
-
-
 License & Author
 ****************
 GNU General Public License, version 2
@@ -113,7 +83,7 @@ http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 Web Links
 *********
 Homepage
-	http://sethdepot.org/site/SethdepotServices#Mail2Web_Gateway
+	https://sethdepot.org/site/SethdepotServices#Tweet_file
 
 Repository
-	https://github.com/sd2k9/mail2web
+	https://github.com/sd2k9/tweetfile
