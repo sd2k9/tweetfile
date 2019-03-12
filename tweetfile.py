@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # file name: ''tweetfile.py''
 #   project: Tweet a File
@@ -7,12 +7,12 @@
 #           - Runs over the .forward file in the linux home directory
 #
 # Content of ~/.forward:
-# |"cd /home/<username>/tweetfile; TMP=/home/<username>/tweetfile/tmp FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python2.6:/usr/bin:/usr/share/perl:/usr/share/perl5:/usr/lib/perl:/home/<username>/tweetfile/tmp fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
+# |"cd /home/<username>/tweetfile; TMP=/home/<username>/tweetfile/tmp FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python3.5:/usr/bin:/usr/share/perl:/usr/share/perl5:/usr/lib/perl:/home/<username>/tweetfile/tmp fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
 # /dev is required for SSL authentication, otherwise urllib2 fails with obscure error
 # /usr/bin and *perl* is required for exiftool
 # /home/<username>/tweetfile/tmp is required because twitter+tempfile creates temporary directories
 # Run with local python lib for oauth2 and twitter:
-#  PYTHONPATH=$PWD/pylib/lib/python2.6/site-packages ./tweetfile.py
+#  PYTHONPATH=$PWD/pylib/lib/python3.5/site-packages ./tweetfile.py
 #      created: 2011-03-16
 #  last change: $LastChangedRevision$
 #
@@ -37,7 +37,6 @@
 
 # *** Import modules
 # To control output level easily
-# from __future__ import print_function
 import logging
 # Argument parser
 import optparse
@@ -63,18 +62,23 @@ import tempfile
 import errno
 # Spawn sub-process
 import subprocess
-# Twitter interface
-import twitter
-# Required modules for bitly URL shortener
-import urllib2
-import urllib
-import simplejson
-
 
 # Get the list of allowed users accessing this service
 # and global settings
 from tweetfileaccess import UserList, Opts
 
+# Twitter interface, when enabled
+if (Opts['twitter'] is not None):
+    print('Twitter interface  enabled: Importing required module')
+    import twitter
+
+# Required modules for bitly URL shortener, when enabled
+if (Opts['bitly_api_user'] is not None) and \
+   (Opts['bitly_api_key'] is not None):
+    print('bitly enabled: Importing required modules')
+    import urllib2
+    import urllib
+    import simplejson
 
 # Provide logging shortcuts
 pinfo  = logging.info
@@ -165,7 +169,7 @@ class twittermsg:
                                access_token_key=tcreds['access_token_key'],
                                access_token_secret=tcreds['access_token_secret']
                                 )
-        # print self._api.VerifyCredentials()
+        # print(self._api.VerifyCredentials())
 
     def _urlshorten(self, link):
         """Shortens the provided link"""
@@ -236,13 +240,13 @@ def extract_mail_content(readin):
     msg = email.message_from_file(readin)
 
     # Debug
-    # print "Sender " + msg['from']
-    # print "Tweet Text " + msg['subject']
-    # print "Multipart? "
+    # print("Sender " + msg['from'])
+    # print("Tweet Text " + msg['subject'])
+    # print("Multipart? ")
     # if msg.is_multipart():
-    #     print "True"
+    #     print ("True")
     # else:
-    #     print "False"
+    #     print ("False")
     # raise ExtractMailError("Debug abort")
 
 
@@ -324,7 +328,7 @@ def store_file(uid, msg):
     dpath = UserList[uid]['putfileto']   # Base directory
     try:
         os.mkdir(dpath)
-    except OSError, e:
+    except OSError as e:
         # Ignore directory exists error
         if e.errno != errno.EEXIST:
             raise
@@ -334,7 +338,7 @@ def store_file(uid, msg):
     filename = fp.name
 
     # Debug
-    # print "Created DIR: " + dpath
+    # print("Created DIR: " + dpath)
     pinfo("Attachment saved to file (in chroot) " + filename)
     # Now finally write the file
     fp.write(msg.get_payload(decode=True))
@@ -356,7 +360,7 @@ def store_file(uid, msg):
                     raise StoreFileError(cmd_stdout + cmd_stderr + "Tried to remove EXIF tags from image but exiftool was terminated by signal " + str(-retcode))
                 elif retcode > 0:
                     raise StoreFileError(cmd_stdout + cmd_stderr + "Tried to remove EXIF tags from image but exiftool returned error code " + str(retcode))
-            except OSError, e:
+            except OSError as e:
                 raise StoreFileError(cmd_stdout + cmd_stderr + "Tried to remove EXIF tags from image but exiftool execution failed: " + str(e))
             except:
                 perror(cmd_stdout + cmd_stderr)
@@ -432,7 +436,7 @@ def main():
     # *** First read stdin to extract the information for parsing
     try:
         uid, text, msg, getfile = extract_mail_content(sys.stdin)
-    except ExtractMailError, detail:
+    except ExtractMailError as detail:
         # Error encountered, most likely not allowed user
         pwarn(detail)
         return 1   # Parsing of .forward file should continue
@@ -453,7 +457,7 @@ def main():
         try:
             # Add the urlbase to the filename
             file_link =  UserList[uid]['fileurlbase'] + "/" + store_file(uid, getfile)
-        except StoreFileError, detail:
+        except StoreFileError as detail:
             # Error encountered, we just raise it
             perror(detail)
             raise
@@ -469,7 +473,7 @@ def main():
        twit.doit(text, file_link)
        pinfo("Twitter update done")
        twit.finish()    # Cleanup
-    except TwitterMsgError, detail:
+    except TwitterMsgError as detail:
         # Error encountered
         perr(detail)
         return 1   # failure
@@ -490,7 +494,7 @@ def main():
     elif UserList[uid]['forwardto'] is not None:
         try:   # Open SMTPConnection; Catch exceptions
             smtp = smtplib.SMTP(Opts['smtp_server_host'], Opts['smtp_server_port'])
-        except (smtplib.SMTPException, socket.error), detail:
+        except (smtplib.SMTPException, socket.error) as detail:
             perror("Establishing SMTP connection to " + \
                        Opts['smtp_server_host'] + ":"  + Opts['smtp_server_port'] + \
                    " failed: " + str(detail))
@@ -502,7 +506,7 @@ def main():
                     # Update fmsg rcpt
                     fmsg.replace_header('To', rcpts)
                     smtp.sendmail(fmsg['From'], rcpts, fmsg.as_string())
-                except smtplib.SMTPException, detail:
+                except smtplib.SMTPException as detail:
                     perror("SMTP Mail sending failed: " + str(detail))
                     break
                 else:

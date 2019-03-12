@@ -22,7 +22,7 @@ You just need to call the program from the ~/.forward file
 for the respective user which should deal with your mail requests.
 
 Content of ~/.forward file:
- |"cd /home/<username>/tweetfile; TMP=/home/<username>/tweetfile/tmp FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python2.6:/usr/bin:/usr/share/perl:/usr/share/perl5:/usr/lib/perl:/home/<username>/tweetfile/tmp fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
+ |"cd /home/<username>/tweetfile; TMP=/home/<username>/tweetfile/tmp FAKECHROOT_EXCLUDE_PATH=/dev:/usr/lib/python3.5:/usr/bin:/usr/share/perl:/usr/share/perl5:/usr/lib/perl:/home/<username>/tweetfile/tmp fakechroot ./watcher_report_output.sh 2>&1 >> watcher_report_output.log"
 
  /dev is required for SSL authentication, otherwise urllib2 fails with obscure error  
  /usr/bin and *perl* is required for exiftool  
