@@ -24,7 +24,7 @@ Opts = {
 
     # When set to another value that None this file permission is applied to all newly created files
     # 'chmod': None,
-    'chmod': 0644,  # -rw-r--r--
+    'chmod': "0644",  # -rw-r--r--
 
     # set to true to automatically strip all EXIF information from
     # JPEG images
@@ -32,6 +32,10 @@ Opts = {
     # See README for this
     'strip_exif': True,
     # 'strip_exif': False,
+
+    #  Enable Twitter interface - None when not used
+    'twitter' : True,
+    # 'twitter' : None,
 
     #  bit.ly URL shortener user name and API key - None when not used
     # You can get it from here: https://bit.ly/a/your_api_key
@@ -68,6 +72,7 @@ UserList = {
       ],
       # Set to None when no forwarding is requied
       # 'forwardto': None,
+      #
       # You need to register this application to your twitter account
       # to allow it's access
       # - Log into your account
